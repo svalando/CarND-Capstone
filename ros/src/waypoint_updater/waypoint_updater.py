@@ -5,6 +5,7 @@ from geometry_msgs.msg import PoseStamped
 from styx_msgs.msg import Lane, Waypoint
 
 import math
+from geometry_msgs.msg import TwistStamped
 
 '''
 This node will publish waypoints from the car's current position to some `x` distance ahead.
@@ -21,10 +22,12 @@ as well as to verify your TL classifier.
 TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
-LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
-
+LOOKAHEAD_WPS = 10 # Number of waypoints we will publish. You can change this number
+PREDICT_TIME = 0.5
+NEAR_ZERO = 0.00001
 
 class WaypointUpdater(object):
+
     def __init__(self):
         rospy.init_node('waypoint_updater')
 
@@ -35,18 +38,87 @@ class WaypointUpdater(object):
 
 
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
+        rospy.Subscriber('/current_velocity', TwistStamped, self.current_velocity_cb)
 
         # TODO: Add other member variables you need below
-
+        self.lane = Lane()
+        self.first_pose = True
+        self.last_pose_stamp = rospy.Time(0)
+        self.current_linear_x = 0.0
+        self.current_angular_z = 0.0
         rospy.spin()
 
     def pose_cb(self, msg):
         # TODO: Implement
-        pass
+        #pass
+
+        self.current_pose = msg.pose
+        """
+        self.current_pose_stamp = msg.header.stamp
+        if self.first_pose == True:
+            self.last_pose = self.current_pose
+            sample_t = 1.0
+            self.predict_pose = self.current_pose
+            self.first_pose = False
+        else:
+            sample_t = self.get_duration(self.last_pose_stamp, self.current_pose_stamp)
+            if sample_t < NEAR_ZERO:
+                sample_t = NEAR_ZERO
+
+        vx = (self.current_pose.position.x - self.last_pose.position.x)/sample_t
+        vy = (self.current_pose.position.y - self.last_pose.position.y)/sample_t
+        rospy.loginfo('vx is %f, vy is %f', vx, vy)
+
+        if vx != 0.0 and vy != 0.0:
+            p = Waypoint()
+            self.predict_pose = p.pose.pose
+            self.predict_pose.position.x = self.current_pose.position.x + vx * PREDICT_TIME
+            self.predict_pose.position.y = self.current_pose.position.y + vy * PREDICT_TIME
+
+        self.last_pose = self.current_pose
+        self.last_pose_stamp = self.current_pose_stamp
+        """
+        delay_d = self.current_linear_x * PREDICT_TIME
+        phi = math.atan2(self.current_pose.position.y, self.current_pose.position.x) + self.current_pose.orientation.z + self.current_angular_z*PREDICT_TIME
+        delta_x = delay_d*math.sin(phi)
+        delta_y = delay_d*math.cos(phi)
+        self.predict_pose = Waypoint().pose.pose
+        self.predict_pose.position.x = self.current_pose.position.x + delta_x
+        self.predict_pose.position.y = self.current_pose.position.y + delta_y
+
+        rospy.loginfo('Current pose --- x is %f, y is %f', self.current_pose.position.x, self.current_pose.position.y)
+        rospy.loginfo('Predict pose --- x is %f, y is %f', self.predict_pose.position.x, self.predict_pose.position.y)
+        self.next_wp = self.find_next_wp(self.lane.waypoints, self.predict_pose)
+        #self.next_wp = self.find_next_wp(self.lane.waypoints, self.current_pose)
+
+        map_x = self.lane.waypoints[self.next_wp].pose.pose.position.x
+        map_y = self.lane.waypoints[self.next_wp].pose.pose.position.y
+
+        rospy.loginfo('Next waypoint[%d] x is %f, y is %f', self.next_wp, map_x, map_y)
+
+        self.final_waypoints = []
+        next_wp_id = self.next_wp
+        for i in range(LOOKAHEAD_WPS):
+            p = self.lane.waypoints[next_wp_id]
+            self.final_waypoints.append(p)
+            next_wp_id += 1
+            if next_wp_id == len(self.lane.waypoints):
+                next_wp_id = 0
+        lane = Lane()
+        lane.header.frame_id = '/world'
+        #lane.header.stamp = rospy.Time(0)
+        lane.header.stamp = rospy.get_rostime()
+
+        lane.waypoints = self.final_waypoints
+        self.final_waypoints_pub.publish(lane)
 
     def waypoints_cb(self, waypoints):
         # TODO: Implement
-        pass
+        #pass
+        #rospy.loginfo('Base waypoints Received - size is %d', len(waypoints.waypoints))
+        self.lane.waypoints = waypoints.waypoints
+        rospy.loginfo('Base waypoints Received - size is %d', len(self.lane.waypoints))
+
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement
@@ -70,6 +142,45 @@ class WaypointUpdater(object):
             wp1 = i
         return dist
 
+    def find_next_wp(self, waypoints, pose):
+        dl = lambda a, b: math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2  + (a.z-b.z)**2)
+        min_dist = dl(waypoints[0].pose.pose.position, pose.position)
+        closest_wp_id = 0
+        for i in range(1, len(waypoints)):
+            dist = dl(waypoints[i].pose.pose.position, pose.position)
+            if dist < min_dist:
+                min_dist = dist
+                closest_wp_id = i
+        cur_x = pose.position.x
+        cur_y = pose.position.y
+        theta = math.atan2(cur_y, cur_x)
+        map_x = waypoints[closest_wp_id].pose.pose.position.x
+        map_y = waypoints[closest_wp_id].pose.pose.position.y
+
+        heading = math.atan2(map_y - cur_y, map_x - cur_x)
+        angle = math.fabs(theta - heading)
+        angle = min(2*math.pi - angle, angle)
+        if angle > math.pi/4:
+            next_wp_id = closest_wp_id + 1
+            if next_wp_id == len(waypoints):
+                next_wp_id = 0
+        else:
+            next_wp_id = closest_wp_id
+
+        return next_wp_id
+
+    def get_duration(self, stamp1, stamp2):
+        if stamp1.secs == stamp2.secs:
+            duration = (stamp2.nsecs - stamp1.nsecs)/1000000000.0
+        else:
+            duration = stamp2.secs - stamp1.secs
+            duration += (1000000000 - stamp1.nsecs + stamp2.nsecs)/1000000000.0
+
+        return duration
+
+    def current_velocity_cb(self, velocity):
+        self.current_linear_x = velocity.twist.linear.x
+        self.current_angular_z = velocity.twist.angular.z
 
 if __name__ == '__main__':
     try:
