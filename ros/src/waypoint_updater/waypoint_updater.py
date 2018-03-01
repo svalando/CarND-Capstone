@@ -23,7 +23,7 @@ TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
 LOOKAHEAD_WPS = 10 # Number of waypoints we will publish. You can change this number
-PREDICT_TIME = 0.5
+PREDICT_TIME = 1.0
 NEAR_ZERO = 0.00001
 
 class WaypointUpdater(object):
@@ -31,13 +31,17 @@ class WaypointUpdater(object):
     def __init__(self):
         rospy.init_node('waypoint_updater')
 
-        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
+        #rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
+        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
+	
         rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
 
         # TODO: Add a subscriber for /traffic_waypoint and /obstacle_waypoint below
 
 
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
+        #self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane)
+
         rospy.Subscriber('/current_velocity', TwistStamped, self.current_velocity_cb)
 
         # TODO: Add other member variables you need below

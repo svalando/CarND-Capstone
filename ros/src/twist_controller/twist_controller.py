@@ -67,4 +67,4 @@ class Controller(object):
             #brake = math.fabs(speed_error/sample_internal)*self.vehicle_mass*self.wheel_radius
             brake = 0.0
 
-        return 0.01, brake, steer
+        return throttle, brake, steer
