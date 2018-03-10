@@ -19,7 +19,7 @@ class TLDetector(object):
     def __init__(self):
         rospy.init_node('tl_detector')
 
-        self.pose = None
+        self.pose = Pose()
         self.waypoints = None
         self.camera_image = None
         self.lights = []
@@ -52,11 +52,26 @@ class TLDetector(object):
         self.last_state = TrafficLight.UNKNOWN
         self.last_wp = -1
         self.state_count = 0
+        
+        self.last_pose = Pose()
+        self.last_pose.position.x = 0.0
+        self.last_pose.position.y = 0.0
+        self.current_heading = 0.0
 
         rospy.spin()
 
     def pose_cb(self, msg):
-        self.pose = msg
+        cur_x = self.pose.position.x
+        cur_y = self.pose.position.y
+        if cur_x != msg.pose.position.x and cur_y != msg.pose.position.y:
+            self.pose = msg.pose
+            last_x = self.last_pose.position.x
+            last_y = self.last_pose.position.y
+            self.current_heading = math.atan2(cur_y - last_y, cur_x - last_x)
+            self.last_pose.position.x = cur_x
+            self.last_pose.position.y = cur_y
+            
+        
 
     def waypoints_cb(self, waypoints):
         self.waypoints = waypoints.waypoints
@@ -190,14 +205,14 @@ class TLDetector(object):
         # List of positions that correspond to the line to stop in front of for a given intersection
         stop_line_positions = self.config['stop_line_positions']
         if(self.pose):
-            #car_position = self.get_closest_waypoint(self.pose.pose)
-            light, tl_position, index = self.find_next_tl_stop(stop_line_positions, self.pose.pose)
+            #car_position = self.get_closest_waypoint(self.pose)
+            light, tl_position, index = self.find_next_tl_stop(stop_line_positions, self.pose)
 
         #TODO find the closest visible traffic light (if one exists)
         light_wp = []
         if light:
             #rospy.loginfo('tl_position is {}'.format(tl_position))
-            #rospy.loginfo("Currently car at {}, {}".format(self.pose.pose.position.x, self.pose.pose.position.y))
+            #rospy.loginfo("Currently car at {}, {}".format(self.pose.position.x, self.pose.position.y))
 
             # Using the classifier
             #state = self.get_light_state(light)
@@ -232,7 +247,7 @@ class TLDetector(object):
         dl = lambda x1, y1, x2, y2: math.sqrt((x1-x2)**2 + (y1-y2)**2)
         cur_x = pose.position.x
         cur_y = pose.position.y
-        theta = math.atan2(cur_y, cur_x)
+        #theta = math.atan2(cur_y, cur_x)
         possible_tls = []
         for i in range(len(stop_line_positions)):
             tl_x = stop_line_positions[i][0]
@@ -240,9 +255,10 @@ class TLDetector(object):
             dist = dl(tl_x, tl_y, cur_x, cur_y)
             if dist < VISIBLE_DIST:
                 heading = math.atan2(tl_y - cur_y, tl_x - cur_x)
-                angle = math.fabs(theta - heading)
+                rospy.loginfo("Cur_heading={}, tl_heading={}".format(self.current_heading, heading))
+                angle = math.fabs(self.current_heading - heading)
                 angle = min(2*math.pi - angle, angle)
-                if angle < math.pi:
+                if angle < math.pi/4:
                      tl = (dist, stop_line_positions[i], i)
                      possible_tls.append(tl)
             
