@@ -41,11 +41,11 @@ class TLDetector(object):
         config_string = rospy.get_param("/traffic_light_config")
         
         self.config = yaml.load(config_string)
-        rospy.loginfo('self.config is %s', self.config)
+        #rospy.loginfo('self.config is %s', self.config)
         self.upcoming_red_light_pub = rospy.Publisher('/traffic_waypoint', Int32, queue_size=1)
 
         self.bridge = CvBridge()
-        #self.light_classifier = TLClassifier()
+        #self.light_classifier = TLClassifier() //Move to the position before the subscriber
         self.listener = tf.TransformListener()
 
         self.state = TrafficLight.UNKNOWN
@@ -63,6 +63,26 @@ class TLDetector(object):
 
     def traffic_cb(self, msg):
         self.lights = msg.lights
+        light_wp, state = self.process_traffic_lights()
+
+        '''
+        Publish upcoming red lights at camera frequency.
+        Each predicted state has to occur `STATE_COUNT_THRESHOLD` number
+        of times till we start using it. Otherwise the previous stable state is
+        used.
+        '''
+        if self.state != state:
+            self.state_count = 0
+            self.state = state
+        elif self.state_count >= STATE_COUNT_THRESHOLD:
+            self.last_state = self.state
+            light_wp = light_wp if state == TrafficLight.RED else -1
+            self.last_wp = light_wp
+            self.upcoming_red_light_pub.publish(Int32(light_wp))
+        else:
+            self.upcoming_red_light_pub.publish(Int32(self.last_wp))
+        self.state_count += 1
+        
 
     def image_cb(self, msg):
         """Identifies red lights in the incoming camera image and publishes the index
@@ -72,6 +92,7 @@ class TLDetector(object):
             msg (Image): image from car-mounted camera
 
         """
+        
         self.has_image = True
         self.camera_image = msg        
         light_wp, state = self.process_traffic_lights()
@@ -123,11 +144,14 @@ class TLDetector(object):
         heading = math.atan2(map_y - cur_y, map_x - cur_x)
         angle = math.fabs(theta - heading)
         angle = min(2*math.pi - angle, angle)
+        
+        # The following is to find the nearest waypoint behind the position
+        # in order to find the nearest waypoint before reaching the stop line of tf
         if angle > math.pi/4:
             next_wp_id = closest_wp_id
         else:
             next_wp_id = closest_wp_id - 1
-            if next_wp_id == -l:
+            if next_wp_id == -1:
                 next_wp_id = len(self.waypoints) - 1
 
         return next_wp_id
@@ -172,15 +196,15 @@ class TLDetector(object):
         #TODO find the closest visible traffic light (if one exists)
         light_wp = []
         if light:
-            rospy.loginfo('tl_position is {}'.format(tl_position))
-            rospy.loginfo("Currently car at {}, {}".format(self.pose.pose.position.x, self.pose.pose.position.y))
+            #rospy.loginfo('tl_position is {}'.format(tl_position))
+            #rospy.loginfo("Currently car at {}, {}".format(self.pose.pose.position.x, self.pose.pose.position.y))
 
             # Using the classifier
             #state = self.get_light_state(light)
             # Using the simulator information
             state = self.lights[index].state
 
-            rospy.loginfo('TL state is %d', state)
+            #rospy.loginfo('TL state is %d', state)
             if state == TrafficLight.RED:
                 tl_pose = Pose()
                 tl_pose.position.x = tl_position[0]
@@ -190,12 +214,12 @@ class TLDetector(object):
                 light_wp_x = self.waypoints[light_wp_id].pose.pose.position.x
                 light_wp_y = self.waypoints[light_wp_id].pose.pose.position.y
                 rospy.loginfo("light_wp[{}] at {}, {}".format(light_wp_id, light_wp_x, light_wp_y))
-                light_wp_x = self.waypoints[light_wp_id-1].pose.pose.position.x
-                light_wp_y = self.waypoints[light_wp_id-1].pose.pose.position.y
-                rospy.loginfo("former_wp[{}] at {}, {}".format(light_wp_id-1, light_wp_x, light_wp_y))
-                light_wp_x = self.waypoints[light_wp_id+1].pose.pose.position.x
-                light_wp_y = self.waypoints[light_wp_id+1].pose.pose.position.y
-                rospy.loginfo("next_wp[{}] at {}, {}".format(light_wp_id+1, light_wp_x, light_wp_y))
+                #light_wp_x = self.waypoints[light_wp_id-1].pose.pose.position.x
+                #light_wp_y = self.waypoints[light_wp_id-1].pose.pose.position.y
+                #rospy.loginfo("former_wp[{}] at {}, {}".format(light_wp_id-1, light_wp_x, light_wp_y))
+                #light_wp_x = self.waypoints[light_wp_id+1].pose.pose.position.x
+                #light_wp_y = self.waypoints[light_wp_id+1].pose.pose.position.y
+                #rospy.loginfo("next_wp[{}] at {}, {}".format(light_wp_id+1, light_wp_x, light_wp_y))
                 return light_wp_id, state
             else:
                 return -1, state
@@ -218,15 +242,15 @@ class TLDetector(object):
                 heading = math.atan2(tl_y - cur_y, tl_x - cur_x)
                 angle = math.fabs(theta - heading)
                 angle = min(2*math.pi - angle, angle)
-                if angle < math.pi/4:
+                if angle < math.pi:
                      tl = (dist, stop_line_positions[i], i)
                      possible_tls.append(tl)
             
-            if len(possible_tls) > 0:
-                possible_tls = sorted(possible_tls)
-                return True, possible_tls[0][1], possible_tls[0][2]
-            else:
-                return False, None, None
+        if len(possible_tls) > 0:
+            possible_tls = sorted(possible_tls)
+            return True, possible_tls[0][1], possible_tls[0][2]
+        else:
+            return False, None, None
 
 if __name__ == '__main__':
     try:
