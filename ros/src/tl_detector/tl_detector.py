@@ -86,6 +86,7 @@ class TLDetector(object):
         of times till we start using it. Otherwise the previous stable state is
         used.
         '''
+        """
         if self.state != state:
             self.state_count = 0
             self.state = state
@@ -97,7 +98,7 @@ class TLDetector(object):
         else:
             self.upcoming_red_light_pub.publish(Int32(self.last_wp))
         self.state_count += 1
-        
+        """
 
     def image_cb(self, msg):
         """Identifies red lights in the incoming camera image and publishes the index
@@ -215,9 +216,9 @@ class TLDetector(object):
             #rospy.loginfo("Currently car at {}, {}".format(self.pose.position.x, self.pose.position.y))
 
             # Using the classifier
-            #state = self.get_light_state(light)
+            state = self.get_light_state(light)
             # Using the simulator information
-            state = self.lights[index].state
+            #state = self.lights[index].state
 
             #rospy.loginfo('TL state is %d', state)
             if state == TrafficLight.RED:
