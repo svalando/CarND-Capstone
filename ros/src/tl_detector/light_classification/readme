@@ -1,0 +1,3 @@
+1. make a directory named tld here
+2. put the frozen graph into the "tld" directory
+3. named the frozen graph "frozen_inference_graph.pb"

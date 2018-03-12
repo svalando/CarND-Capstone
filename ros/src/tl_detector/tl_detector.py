@@ -24,6 +24,7 @@ class TLDetector(object):
         self.camera_image = None
         self.lights = []
         self.light_classifier = TLClassifier()
+        self.has_image = False
 
         sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
         sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
@@ -78,7 +79,7 @@ class TLDetector(object):
 
     def traffic_cb(self, msg):
         self.lights = msg.lights
-        light_wp, state = self.process_traffic_lights()
+        #light_wp, state = self.process_traffic_lights()
 
         '''
         Publish upcoming red lights at camera frequency.
@@ -256,7 +257,7 @@ class TLDetector(object):
             dist = dl(tl_x, tl_y, cur_x, cur_y)
             if dist < VISIBLE_DIST:
                 heading = math.atan2(tl_y - cur_y, tl_x - cur_x)
-                rospy.loginfo("Cur_heading={}, tl_heading={}".format(self.current_heading, heading))
+                #rospy.loginfo("Cur_heading={}, tl_heading={}".format(self.current_heading, heading))
                 angle = math.fabs(self.current_heading - heading)
                 angle = min(2*math.pi - angle, angle)
                 if angle < math.pi/4:
