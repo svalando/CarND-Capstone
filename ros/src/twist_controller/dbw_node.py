@@ -36,22 +36,22 @@ class DBWNode(object):
     def __init__(self):
         rospy.init_node('dbw_node')
 
-        vehicle_mass = rospy.get_param('~vehicle_mass', 1736.35)
-        fuel_capacity = rospy.get_param('~fuel_capacity', 13.5)
-        brake_deadband = rospy.get_param('~brake_deadband', .1)
-        decel_limit = rospy.get_param('~decel_limit', -5)
-        accel_limit = rospy.get_param('~accel_limit', 1.)
-        wheel_radius = rospy.get_param('~wheel_radius', 0.2413)
-        wheel_base = rospy.get_param('~wheel_base', 2.8498)
-        steer_ratio = rospy.get_param('~steer_ratio', 14.8)
-        max_lat_accel = rospy.get_param('~max_lat_accel', 3.)
+        vehicle_mass    = rospy.get_param('~vehicle_mass', 1736.35)
+        fuel_capacity   = rospy.get_param('~fuel_capacity', 13.5)
+        brake_deadband  = rospy.get_param('~brake_deadband', .1)
+        decel_limit     = rospy.get_param('~decel_limit', -5)
+        accel_limit     = rospy.get_param('~accel_limit', 1.)
+        wheel_radius    = rospy.get_param('~wheel_radius', 0.2413)
+        wheel_base      = rospy.get_param('~wheel_base', 2.8498)
+        steer_ratio     = rospy.get_param('~steer_ratio', 14.8)
+        max_lat_accel   = rospy.get_param('~max_lat_accel', 3.)
         max_steer_angle = rospy.get_param('~max_steer_angle', 8.)
 
-        self.steer_pub = rospy.Publisher('/vehicle/steering_cmd',
+        self.steer_pub    = rospy.Publisher('/vehicle/steering_cmd',
                                          SteeringCmd, queue_size=1)
         self.throttle_pub = rospy.Publisher('/vehicle/throttle_cmd',
                                             ThrottleCmd, queue_size=1)
-        self.brake_pub = rospy.Publisher('/vehicle/brake_cmd',
+        self.brake_pub    = rospy.Publisher('/vehicle/brake_cmd',
                                          BrakeCmd, queue_size=1)
 
         # TODO: Create `Controller` object
@@ -80,6 +80,7 @@ class DBWNode(object):
         self.current_linear_x = 0.0
         self.current_angular_z = 0.0
         self.enabled = False
+        self.reset_dt = True
         self.sample_internal = 0.02
         self.last_sample_time = rospy.get_rostime()
         self.last_final_wp_time = rospy.get_rostime()
@@ -110,11 +111,15 @@ class DBWNode(object):
                                                                 self.cmd_angular_z,
                                                                 self.current_linear_x,
                                                                 self.current_angular_z,
-                                                                self.sample_internal)
+                                                                self.reset_dt)
 
                rospy.loginfo('Throttle is %f, Brake is %f', throttle, brake)
 
                self.publish(throttle, brake, steering)
+               self.reset_dt = False
+            else:
+                self.reset_dt = True
+
             rate.sleep()
 
     def publish(self, throttle, brake, steer):

@@ -1,6 +1,7 @@
 
 from pid import PID
 from yaw_controller import YawController
+from lowpass import LowPassFilter
 import math
 import rospy
 
@@ -32,39 +33,58 @@ class Controller(object):
         self.steer_ratio = steer_ratio
         self.max_lat_accel = max_lat_accel
         self.max_steer_angle = max_steer_angle 
-
-        self.throttle_controller = PID(1.0, 0.0, -1.23978)
+        self.throttle_controller = PID(1.5, 0.001, 0.0, 0 ,1)
+        #self.throttle_controller = PID(8, 0.002, 0.5, 0 ,1)
         self.steer_controller = YawController(self.wheel_base,
                                               self.steer_ratio,
                                               0.001,
                                               self.max_lat_accel,
                                               self.max_steer_angle)
+        self.previous_time = 0
+        self.lpfilter = LowPassFilter(0.2,0.1)
+        self.sim_scale_factor = 15 # set to 1 for Carla???
 
     def control(self, 
                 cmd_linear_x,
                 cmd_angular_z,
                 current_linear_x,
                 current_angular_z,
-                sample_internal):
+                reset_dt):
         # TODO: Change the arg, kwarg list to suit your needs
         # Return throttle, brake, steer
         #speed_error = current_linear_x - cmd_linear_x
-        speed_error = cmd_linear_x - current_linear_x
-
-        rospy.loginfo('speed_error is %f', speed_error)
-
-        throttle = self.throttle_controller.step(speed_error, sample_internal)
-        rospy.loginfo('pid result is %f', throttle)
-
-        steer = self.steer_controller.get_steering(cmd_linear_x, cmd_angular_z, current_linear_x)
-
-        if throttle >= 0.0:
-            brake = 0.0
-            if throttle > self.accel_limit:
-                throttle = self.accel_limit
-        else:
+        if reset_dt:
+            self.previous_time = rospy.get_time()
             throttle = 0.0
-            #brake = math.fabs(speed_error/sample_internal)*self.vehicle_mass*self.wheel_radius
-            brake = 0.0
+            steer    = 0.0
+            brake    = 0.0
+        else:
+            delta_t = rospy.get_time() - self.previous_time
+        
+        
+            speed_error = cmd_linear_x - current_linear_x
+
+
+
+            steer = self.steer_controller.get_steering(cmd_linear_x, cmd_angular_z, current_linear_x)
+            steer = self.lpfilter.filt(steer)
+            
+            if speed_error >= 0.0:
+                brake = 0.0
+                speed_error = self.sim_scale_factor*min(speed_error, self.accel_limit*delta_t)
+                throttle = self.throttle_controller.step(speed_error, delta_t)
+
+            else:
+                throttle = 0.0
+                decel = max(self.decel_limit, speed_error/delta_t)
+                if abs(decel) < self.brake_deadband:
+                    brake = 0.0
+                else:        
+                    mass = self.vehicle_mass + self.fuel_capacity*GAS_DENSITY
+                    brake = abs(decel)*mass*self.wheel_radius
+                
+            rospy.loginfo('speed_error is %f', speed_error)
+            rospy.loginfo('pid result is %f', throttle)    
+            self.previous_time = rospy.get_time()
 
         return throttle, brake, steer
