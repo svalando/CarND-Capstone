@@ -79,7 +79,7 @@ class TLDetector(object):
 
     def traffic_cb(self, msg):
         self.lights = msg.lights
-        #light_wp, state = self.process_traffic_lights()
+        light_wp, state = self.process_traffic_lights()
 
         '''
         Publish upcoming red lights at camera frequency.
@@ -87,7 +87,7 @@ class TLDetector(object):
         of times till we start using it. Otherwise the previous stable state is
         used.
         '''
-        """
+        
         if self.state != state:
             self.state_count = 0
             self.state = state
@@ -99,7 +99,7 @@ class TLDetector(object):
         else:
             self.upcoming_red_light_pub.publish(Int32(self.last_wp))
         self.state_count += 1
-        """
+        
 
     def image_cb(self, msg):
         """Identifies red lights in the incoming camera image and publishes the index
@@ -212,15 +212,15 @@ class TLDetector(object):
             light, tl_position, index = self.find_next_tl_stop(stop_line_positions, self.pose)
 
         #TODO find the closest visible traffic light (if one exists)
-        light_wp = []
+        #light_wp = []
         if light:
             #rospy.loginfo('tl_position is {}'.format(tl_position))
             #rospy.loginfo("Currently car at {}, {}".format(self.pose.position.x, self.pose.position.y))
 
             # Using the classifier
-            state = self.get_light_state(light)
+            #state = self.get_light_state(light)
             # Using the simulator information
-            #state = self.lights[index].state
+            state = self.lights[index].state
 
             #rospy.loginfo('TL state is %d', state)
             if state == TrafficLight.RED:
@@ -228,10 +228,10 @@ class TLDetector(object):
                 tl_pose.position.x = tl_position[0]
                 tl_pose.position.y = tl_position[1]
                 light_wp_id = self.get_closest_waypoint(tl_pose)
-                light_wp.append(light_wp_id)
-                light_wp_x = self.waypoints[light_wp_id].pose.pose.position.x
-                light_wp_y = self.waypoints[light_wp_id].pose.pose.position.y
-                rospy.loginfo("light_wp[{}] at {}, {}".format(light_wp_id, light_wp_x, light_wp_y))
+                #light_wp.append(light_wp_id)
+                #light_wp_x = self.waypoints[light_wp_id].pose.pose.position.x
+                #light_wp_y = self.waypoints[light_wp_id].pose.pose.position.y
+                #rospy.loginfo("light_wp[{}] at {}, {}".format(light_wp_id, light_wp_x, light_wp_y))
                 #light_wp_x = self.waypoints[light_wp_id-1].pose.pose.position.x
                 #light_wp_y = self.waypoints[light_wp_id-1].pose.pose.position.y
                 #rospy.loginfo("former_wp[{}] at {}, {}".format(light_wp_id-1, light_wp_x, light_wp_y))
