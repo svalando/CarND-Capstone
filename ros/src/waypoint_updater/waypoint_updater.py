@@ -25,6 +25,7 @@ LOOKAHEAD_WPS = 100 # Number of waypoints we will publish. You can change this n
 PREDICT_TIME = 1.0
 NEAR_ZERO = 0.00001
 MAX_SPEED = 5.0
+STOP_BEFORE_TL = 2.5
 
 class WaypointUpdater(object):
 
@@ -50,9 +51,7 @@ class WaypointUpdater(object):
         self.traffic_light_wp   = -1
         self.traffic_light_stop = False
         self.traffic_light_det  = False
-        self.base_waypoints_2x  = []
-        self.break_wp           = 0
-        self.breaking           = False
+        self.delta_v_per_m       = 0.0
         rospy.spin()
 
     def pose_cb(self, msg):
@@ -97,61 +96,53 @@ class WaypointUpdater(object):
 
         #self.debug_waypoint_updater_pub.publish(str(self.traffic_light_det))
         
-        # Check if there is a red light up head
+        # Check if there is a red light up ahead
         if self.traffic_light_wp != -1:
             #Get the distance to the traffic light
             dist_to_tl  = self.distance_fwrd(self.lane.waypoints, self.next_wp, self.traffic_light_wp)
+            
             # Get desired stopping distance
             # for smooth stop use 1 m/s^2 deaccelaration
             dist_to_stop = (self.current_linear_x**2)/2.0   # s = (v^2 - V^2)/2*a if a is constant
 
-            # Assert stoping cmd if the stoping distance is less than distance to traffic light            
-            if dist_to_stop <= dist_to_tl:
+            # Assert stoping cmd if the stoping distance is less than distance to traffic light           
+            if dist_to_stop >= (dist_to_tl - STOP_BEFORE_TL):
                 self.traffic_light_stop = True
             else:
                 self.traffic_light_stop = False
-
-            # This should only be run once per detected traffic light
-            # It finds the way point to start breaking at
-            if not(self.traffic_light_det):
-                self.break_wp = self.get_wp_to_start_break(self.lane.waypoints, self.next_wp, self.traffic_light_wp, dist_to_stop)
-                #self.debug_waypoint_updater_pub.publish("NXT_WP: " + str(self.next_wp) + " Break WP: "+str(self.break_wp))
-                self.traffic_light_det  = True
+            
         else :
             self.traffic_light_stop = False
             self.traffic_light_det  = False
-            self.breaking           = False   
-
+            
+        # Start to brake
         if self.traffic_light_stop :
             next_wp_id = self.next_wp
 
-            if self.breaking :
-                delta_v = self.get_break_delta_v(self.current_linear_x, self.traffic_light_wp-1, self.next_wp)
-            else :
-                delta_v = self.get_break_delta_v(self.current_linear_x, self.traffic_light_wp-1, self.break_wp)
-                
+            # Only run this once per Traffic light
+            if not(self.traffic_light_det):
+                # Calculate deacceration per meter
+                if dist_to_stop - STOP_BEFORE_TL >= 0 :
+                    self.delta_v_per_m = self.current_linear_x/(dist_to_stop - STOP_BEFORE_TL) 
+                else :
+                    self.delta_v_per_m = self.current_linear_x/STOP_BEFORE_TL
+                self.traffic_light_det  = True
+
             new_v = self.current_linear_x
             for i in range(LOOKAHEAD_WPS):
-                new_v -= delta_v 
-                if new_v < 0:
+                # Get distance to next wp from current
+                dist_to_nxt_wp = self.distance_fwrd(self.lane.waypoints, next_wp_id, next_wp_id +1)
+                new_v -= self.delta_v_per_m *  dist_to_nxt_wp
+                
+                if new_v < 0.0:
                     new_v = 0.0
-
-                if self.breaking :
-                    self.set_waypoint_velocity(self.final_waypoints, i, new_v)
-                # Use a range here since it seems not exact 
-                elif self.break_wp -1 <= next_wp_id <= self.break_wp +1 :  
-                    self.breaking = True
-                    self.set_waypoint_velocity(self.final_waypoints, i, new_v)
-
-                if i == 0 :
-                    self.debug_waypoint_updater_pub.publish("NXT_WP: " + str(self.next_wp) + " Speed: "+str(new_v))
+                # Set new speed for wp
+                self.set_waypoint_velocity(self.final_waypoints, i, new_v)
 
                 next_wp_id += 1
                 if next_wp_id == len(self.lane.waypoints):
                     next_wp_id = 0
-                
-       
-            
+ 
         lane = Lane()
         lane.header.frame_id = '/world'
         #lane.header.stamp = rospy.Time(0)
@@ -160,55 +151,13 @@ class WaypointUpdater(object):
         lane.waypoints = self.final_waypoints
         self.final_waypoints_pub.publish(lane)
 
-    def get_break_delta_v(self, speed , wp1 ,wp2):
-        delta_v = 0.0
-        if wp2 >= wp1 :
-            num_wp = wp2-wp1
-        else:
-            num_wp = len(self.lane.waypoints) - wp1 + wp2
-        delta_v = speed/num_wp
-        return delta_v
-
-
-
-
-    def get_wp_to_start_break(self, waypoints, wp1 ,wp2, dist):
-        if wp2 > wp1 :
-            num_wp = wp2-wp1
-        else:
-            num_wp = len(waypoints) - wp1 + wp2
-        
-        break_wp   = wp2
-        next_wp_id = wp1
-        for i in range(num_wp -1):
-            temp_dist = self.distance_fwrd(waypoints, next_wp_id, wp2)
-            if temp_dist <= dist :
-                break_wp = next_wp_id
-                
-            next_wp_id += 1
-            if next_wp_id == len(waypoints):
-                next_wp_id = 0
-
-        return break_wp
-
-  
 
     def waypoints_cb(self, waypoints):
-        # TODO: Implement
-        #pass
-        #rospy.loginfo('Base waypoints Received - size is %d', len(waypoints.waypoints))
         self.lane.waypoints = waypoints.waypoints
-        self.base_waypoints_2x = copy.deepcopy(self.lane.waypoints)
-        #self.base_waypoints_2x = copy.deepcopy(waypoints.waypoints)
-        for i in range(0, len(self.lane.waypoints)):
-            p = self.base_waypoints_2x[i]
-            self.base_waypoints_2x.append(p)
-        
         #rospy.loginfo('Base waypoints Received - size is %d', len(self.lane.waypoints))
-        self.debug_waypoint_updater_pub.publish("test1")
+
 
     def traffic_cb(self, msg):
-        # TODO: Callback for /traffic_waypoint message. Implement
         self.traffic_light_wp = int(msg.data)
 
     def obstacle_cb(self, msg):
