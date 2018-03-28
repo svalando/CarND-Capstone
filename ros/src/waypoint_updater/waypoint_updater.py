@@ -79,16 +79,7 @@ class WaypointUpdater(object):
         if self.current_pose is None:
             return
 
-        delay_d = self.current_linear_x * PREDICT_TIME
-        phi = math.atan2(self.current_pose.position.y,
-                         self.current_pose.position.x) + self.current_pose.orientation.z + self.current_angular_z * PREDICT_TIME
-        delta_x = delay_d * math.sin(phi)
-        delta_y = delay_d * math.cos(phi)
-
-        self.predict_pose = Waypoint().pose.pose
-        self.predict_pose.position.x = self.current_pose.position.x + delta_x
-        self.predict_pose.position.y = self.current_pose.position.y + delta_y
-        self.next_wp = self.find_next_wp(self.lane.waypoints, self.predict_pose)
+        self.next_wp = self.find_next_wp(self.lane.waypoints, self.current_pose)
 
         # Set default to maximum speed
         self.final_waypoints = []
