@@ -14,7 +14,7 @@ from std_msgs.msg      import String
 This node will publish waypoints from the car's current position to some `x` distance ahead.
 '''
 
-LOOKAHEAD_WPS = 50 # Number of waypoints we will publish
+LOOKAHEAD_WPS = 100 # Number of waypoints we will publish
 PREDICT_TIME = 1.0
 NEAR_ZERO = 0.00001
 STOP_BEFORE_TL = 2.5
@@ -47,7 +47,7 @@ class WaypointUpdater(object):
         self.traffic_light_stop = False
         self.traffic_light_det  = False
         self.delta_v_per_m      = 0.0
-        self.max_speed          = rospy.get_param('~velocity', 20.0)
+        self.max_speed          = rospy.get_param('~velocity', 10.0)
 
         # Loop that keeps publishing at specified HZ rate
         rate = rospy.Rate(ROSPY_HZ_RATE)
