@@ -12,55 +12,57 @@ from std_msgs.msg      import String
          
 '''
 This node will publish waypoints from the car's current position to some `x` distance ahead.
-As mentioned in the doc, you should ideally first implement a version which does not care
-about traffic lights or obstacles.
-Once you have created dbw_node, you will update this node to use the status of traffic lights too.
-Please note that our simulator also provides the exact location of traffic lights and their
-current status in `/vehicle/traffic_lights` message. You can use this message to build this node
-as well as to verify your TL classifier.
-TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
-LOOKAHEAD_WPS = 100 # Number of waypoints we will publish. You can change this number
+LOOKAHEAD_WPS = 50 # Number of waypoints we will publish
 PREDICT_TIME = 1.0
 NEAR_ZERO = 0.00001
-MAX_SPEED = 5.0
 STOP_BEFORE_TL = 2.5
+ROSPY_HZ_RATE = 20 # Rospy HZ Rate to determine publishing frequency
 
 class WaypointUpdater(object):
 
     def __init__(self):
         rospy.init_node('waypoint_updater')
 
-        #subscriptions
+        # Subscriptions
         rospy.Subscriber(   '/base_waypoints',         Lane, self.waypoints_cb)
         rospy.Subscriber(     '/current_pose',  PoseStamped, self.pose_cb,     queue_size=1)
         rospy.Subscriber( '/traffic_waypoint',        Int32, self.traffic_cb,  queue_size=1)
         rospy.Subscriber('/obstacle_waypoint',         Lane, self.obstacle_cb, queue_size=1)
         rospy.Subscriber( '/current_velocity', TwistStamped, self.current_velocity_cb)
 
-        #Publish
+        # Publish
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
         self.debug_waypoint_updater_pub = rospy.Publisher('debug_waypoint_updater', String, queue_size=1)
-        # TODO: Add other member variables you need below
+
+        # Member variables
         self.lane               = Lane()
         self.first_pose         = True
+        self.current_pose = None
         self.last_pose_stamp    = rospy.Time(0)
         self.current_linear_x   = 0.0
         self.current_angular_z  = 0.0
         self.traffic_light_wp   = -1
         self.traffic_light_stop = False
         self.traffic_light_det  = False
-        self.delta_v_per_m       = 0.0
-        rospy.spin()
+        self.delta_v_per_m      = 0.0
+        self.max_speed          = rospy.get_param('~velocity', 20.0)
+
+        # Loop that keeps publishing at specified HZ rate
+        rate = rospy.Rate(ROSPY_HZ_RATE)
+        while not rospy.is_shutdown():
+            self.publish_final_waypoints()
+            rate.sleep()
 
     def pose_cb(self, msg):
-        # TODO: Implement
-        #pass
-
-        # @kai check from here to....
         self.current_pose = msg.pose
-       
+
+    def publish_final_waypoints(self):    
+        if self.current_pose is None:
+            rospy.logwarn("Waiting for current_pose.. Nothing there yet")
+            return           
+
         delay_d = self.current_linear_x * PREDICT_TIME
         phi     = math.atan2(self.current_pose.position.y, self.current_pose.position.x) + self.current_pose.orientation.z + self.current_angular_z*PREDICT_TIME
         delta_x = delay_d*math.sin(phi)
@@ -70,26 +72,14 @@ class WaypointUpdater(object):
         self.predict_pose.position.x = self.current_pose.position.x + delta_x
         self.predict_pose.position.y = self.current_pose.position.y + delta_y
         self.next_wp = self.find_next_wp(self.lane.waypoints, self.predict_pose)
-        #self.next_wp = self.find_next_wp(self.lane.waypoints, self.current_pose)
-        
-        #rospy.loginfo('Current pose --- x is %f, y is %f', self.current_pose.position.x, self.current_pose.position.y)
-        #rospy.loginfo('Predict pose --- x is %f, y is %f', self.predict_pose.position.x, self.predict_pose.position.y)
-        #map_x = self.lane.waypoints[self.next_wp].pose.pose.position.x
-        #map_y = self.lane.waypoints[self.next_wp].pose.pose.position.y
-        #rospy.loginfo('Next waypoint[%d] x is %f, y is %f', self.next_wp, map_x, map_y)
-        
-        # @kai to here. I think we have some issues with the estimated next way point is not where the car is heading always.
-        # You can see this that the car sometimes drives infront of the first way point (the green dotted line) or sometime to far behind
 
-
-        
         # Set default to maximum speed
         self.final_waypoints = []
         next_wp_id = self.next_wp
         for i in range(LOOKAHEAD_WPS):
             p = self.lane.waypoints[next_wp_id]
             self.final_waypoints.append(p)
-            self.set_waypoint_velocity(self.final_waypoints, i, MAX_SPEED)
+            self.set_waypoint_velocity(self.final_waypoints, i, self.max_speed)
             next_wp_id += 1
             if next_wp_id == len(self.lane.waypoints):
                 next_wp_id = 0
@@ -145,7 +135,6 @@ class WaypointUpdater(object):
  
         lane = Lane()
         lane.header.frame_id = '/world'
-        #lane.header.stamp = rospy.Time(0)
         lane.header.stamp = rospy.get_rostime()
 
         lane.waypoints = self.final_waypoints
@@ -154,14 +143,12 @@ class WaypointUpdater(object):
 
     def waypoints_cb(self, waypoints):
         self.lane.waypoints = waypoints.waypoints
-        #rospy.loginfo('Base waypoints Received - size is %d', len(self.lane.waypoints))
-
 
     def traffic_cb(self, msg):
         self.traffic_light_wp = int(msg.data)
 
     def obstacle_cb(self, msg):
-        # TODO: Callback for /obstacle_waypoint message. We will implement it later
+        # Not yet implemented
         pass
 
     def get_waypoint_velocity(self, waypoint):
@@ -225,15 +212,6 @@ class WaypointUpdater(object):
             next_wp_id = closest_wp_id
 
         return next_wp_id
-
-    def get_duration(self, stamp1, stamp2):
-        if stamp1.secs == stamp2.secs:
-            duration = (stamp2.nsecs - stamp1.nsecs)/1000000000.0
-        else:
-            duration = stamp2.secs - stamp1.secs
-            duration += (1000000000 - stamp1.nsecs + stamp2.nsecs)/1000000000.0
-
-        return duration
 
     def current_velocity_cb(self, velocity):
         self.current_linear_x = velocity.twist.linear.x
