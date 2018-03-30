@@ -15,7 +15,6 @@ This node will publish waypoints from the car's current position to some `x` dis
 '''
 
 LOOKAHEAD_WPS = 100  # Number of waypoints we will publish
-PREDICT_TIME = 1.0
 NEAR_ZERO = 0.00001
 STOP_BEFORE_TL = 2.5
 HZ_RATE = 20  # Rospy HZ Rate to determine publishing frequency
@@ -49,8 +48,8 @@ class WaypointUpdater(object):
         self.traffic_light_stop = False
         self.traffic_light_det = False
         self.delta_v_per_m = 0.0
-        self.max_speed = rospy.get_param('~velocity', 10.0)
         self.final_waypoints = []
+        self.original_velocities = []
 
         # Loop that keeps publishing at specified HZ rate
         rate = rospy.Rate(HZ_RATE)
@@ -58,8 +57,10 @@ class WaypointUpdater(object):
             self.publish_final_waypoints()
             rate.sleep()
 
-    def waypoints_cb(self, waypoints):
-        self.lane.waypoints = waypoints.waypoints
+    def waypoints_cb(self, msg):
+        self.lane.waypoints = msg.waypoints
+        for i in range(len(msg.waypoints)):
+            self.original_velocities.append(self.get_waypoint_velocity(self.lane.waypoints[i]))
 
     def traffic_cb(self, msg):
         self.traffic_light_wp = msg.data
@@ -87,7 +88,7 @@ class WaypointUpdater(object):
         for i in range(LOOKAHEAD_WPS):
             p = self.lane.waypoints[next_wp_id]
             self.final_waypoints.append(p)
-            self.set_waypoint_velocity(self.final_waypoints, i, self.max_speed)
+            self.set_waypoint_velocity(self.final_waypoints, i, self.original_velocities[i])
             next_wp_id += 1
             if next_wp_id == len(self.lane.waypoints):
                 next_wp_id = 0
