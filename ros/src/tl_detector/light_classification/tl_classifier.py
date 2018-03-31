@@ -4,13 +4,13 @@ import rospy
 import tensorflow as tf
 import numpy as np
 #from PIL import Image
-#import cv2
+import cv2
 
 FASTER_RCNN_GRAPH_FILE = 'light_classification/tld/frozen_inference_graph.pb'
 BOX_CONFIDENCE = 0.8
 RED_THRESHOLD = 150
 GREEN_THRESHOLD = 150
-CONF_TOP = 2.0
+CONF_TOP = 1.2
 CONF_BOT = 0.5
 TOP_5 = 5
 
@@ -98,10 +98,15 @@ class TLClassifier(object):
                 #class_id = int(classes[i])
                 #tl_image = image.crop((int(left), int(bot), int(right), int(top)))
                 tl_image = image[int(bot):int(top), int(left):int(right)]
+                
+                # For debug
+                #self.draw_boxes(image, box_coords, classes)
+                #cv2.imwrite("./tl_{}.jpg".format(i), tl_image)
+                
                 im = np.array(tl_image)
                 total_vote += im.shape[0]*im.shape[1]
                 # Create the histogram for each RGB channel
-                rh, gh, bh = self.color_hist(im, nbins=32, bins_range=(0, 256))
+                bh, gh, rh = self.color_hist(im, nbins=32, bins_range=(0, 256))
                 if rh is not None:           
                     for i in range(len(rh[0])):
                         if rh[1][i] > RED_THRESHOLD:
@@ -113,26 +118,36 @@ class TLClassifier(object):
                             g_vote += gh[0][i]
 
             if TL_Detected:
+                # For debug
+                #cv2.imwrite("./result.jpg", image)
+                
                 r_confidence = r_vote/total_vote
                 g_confidence = g_vote/total_vote
+                print("r_confidence={}".format(r_confidence))
+                print("g_confidence={}".format(g_confidence))
                 if g_confidence > 0.0:
                     conf_ratio = r_confidence/g_confidence
                     if conf_ratio > CONF_TOP:
                         #return TrafficLight.RED
                         r_conf += 1
+                        print("hist judge is Red")
                     elif conf_ratio < CONF_BOT:
                         #return TrafficLight.GREEN
                         g_conf += 1
+                        print("hist judge is Green")
                     else:
                         #return TrafficLight.YELLOW
                         y_conf += 1
+                        print("hist judge is Yellow")
                 else:
                     if r_confidence > 0.0:
                         #return TrafficLight.RED
                         r_conf += 1
+                        print("hist judge is Red")
                     else:
                         #return TrafficLight.UNKNOWN
                         u_conf += 1
+                        print("hist judge is Unknown")
             else:
                 #return TrafficLight.UNKNOWN
                 u_conf += 1
@@ -144,7 +159,7 @@ class TLClassifier(object):
         """Return the top several scores boxes """
         idxs = []
         for i in range(top_x):
-            #print("scores[{}] = {}, class = {}".format(i, scores[i], classes[i]))
+            print("scores[{}] = {}, class = {}".format(i, scores[i], classes[i]))
             rospy.loginfo("scores[{}] = {}, class = {}".format(i, scores[i], classes[i]))
             idxs.append(i)
     
@@ -219,5 +234,19 @@ class TLClassifier(object):
                 (TrafficLight.GREEN, g_conf),
                 (TrafficLight.YELLOW, y_conf),
                 (TrafficLight.UNKNOWN, u_conf)]
-        sorted(conf, key = lambda x: x[1])
-        return conf[0][0]
+
+        conf = sorted(conf, key = lambda x: x[1])
+        for i in range(len(conf)):
+            print("{} is {}".format(conf[i][0], conf[i][1]))
+        return conf[-1][0]
+    
+    def draw_boxes(self, image, boxes, classes, thickness=4):
+        """Draw bounding boxes on the image"""
+        #draw = ImageDraw.Draw(image)
+        for i in range(len(boxes)):
+            bot, left, top, right = boxes[i, ...]
+            #class_id = int(classes[i])
+            #color = COLOR_LIST[class_id]
+            #draw.line([(left, top), (left, bot), (right, bot), (right, top), (left, top)], width=thickness, fill=color)
+            cv2.rectangle(image, (left, top), (right, bot), (0, 255, 0), 3)
+        add_batch_test_classifier
