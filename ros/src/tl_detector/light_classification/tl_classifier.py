@@ -71,6 +71,9 @@ class TLClassifier(object):
             top_x = TOP_5
             # Filter boxes with a confidence score less than `confidence_cutoff`
             boxes, scores, classes = self.filter_boxes(top_x, boxes, scores, classes)
+            
+            #accumulate the scores according to the class
+            r_conf, g_conf, y_conf, u_conf = self.accumulate_conf(scores, classes)
 
             # The current box coordinates are normalized to a range between 0 and 1.
             # This converts the coordinates actual location on the image.
@@ -115,22 +118,27 @@ class TLClassifier(object):
                 if g_confidence > 0.0:
                     conf_ratio = r_confidence/g_confidence
                     if conf_ratio > CONF_TOP:
-                        return TrafficLight.RED
+                        #return TrafficLight.RED
+                        r_conf += 1
                     elif conf_ratio < CONF_BOT:
-                        return TrafficLight.GREEN
+                        #return TrafficLight.GREEN
+                        g_conf += 1
                     else:
-                        return TrafficLight.YELLOW
+                        #return TrafficLight.YELLOW
+                        y_conf += 1
                 else:
                     if r_confidence > 0.0:
-                        return TrafficLight.RED
+                        #return TrafficLight.RED
+                        r_conf += 1
                     else:
-                        rospy.loginfo('Check1...')
-                        return TrafficLight.UNKNOWN
+                        #return TrafficLight.UNKNOWN
+                        u_conf += 1
             else:
-                rospy.loginfo('Check2...')
-                return TrafficLight.UNKNOWN
+                #return TrafficLight.UNKNOWN
+                u_conf += 1
             
-        return TrafficLight.UNKNOWN
+        #return TrafficLight.UNKNOWN
+        return self.sort_conf(r_conf, g_conf, y_conf, u_conf)
 
     def filter_boxes(self, top_x, boxes, scores, classes):
         """Return the top several scores boxes """
@@ -187,3 +195,29 @@ class TLClassifier(object):
         ghist = np.histogram(img[:,:,1], nbins, bins_range)
         bhist = np.histogram(img[:,:,2], nbins, bins_range)
         return rhist, ghist, bhist
+    
+    @staticmethod
+    def accumulate_conf(scores, classes):
+        r_conf = 0
+        g_conf = 0
+        y_conf = 0
+        u_conf = 0
+        for i in range(len(classes)):
+            if classes[i] == 1:
+                g_conf += scores[i]
+            elif classes[i] == 2:
+                r_conf += scores[i]
+            elif classes[i] == 7:
+                y_conf += scores[i]
+            else:
+                u_conf += scores[i]
+        return r_conf, g_conf, y_conf, u_conf
+    
+    @staticmethod
+    def sort_conf(r_conf, g_conf, y_conf, u_conf):
+        conf = [(TrafficLight.RED, r_conf),
+                (TrafficLight.GREEN, g_conf),
+                (TrafficLight.YELLOW, y_conf),
+                (TrafficLight.UNKNOWN, u_conf)]
+        sorted(conf, lambda x: x[1])
+        return conf[-1][0]
