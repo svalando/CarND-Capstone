@@ -1,15 +1,15 @@
 #!/usr/bin/env python
 
 import rospy
+from scipy.spatial import KDTree
 from geometry_msgs.msg import PoseStamped
 from styx_msgs.msg import Lane, Waypoint
 
 import math
-import copy
 from geometry_msgs.msg import TwistStamped
 from std_msgs.msg import Int32
 from std_msgs.msg import String
-
+import numpy as np
 '''
 This node will publish waypoints from the car's current position to some `x` distance ahead.
 '''
@@ -50,17 +50,24 @@ class WaypointUpdater(object):
         self.delta_v_per_m = 0.0
         self.final_waypoints = []
         self.original_velocities = []
+        self.waypoints_2d = []
+        self.waypoint_tree = None
 
         # Loop that keeps publishing at specified HZ rate
         rate = rospy.Rate(HZ_RATE)
         while not rospy.is_shutdown():
-            self.publish_final_waypoints()
+            if self.current_pose is not None:
+                self.publish_final_waypoints()
             rate.sleep()
 
     def waypoints_cb(self, msg):
         self.lane.waypoints = msg.waypoints
         for i in range(len(msg.waypoints)):
             self.original_velocities.append(self.get_waypoint_velocity(self.lane.waypoints[i]))
+        if not self.waypoints_2d:
+            self.waypoints_2d = [[waypoint.pose.pose.position.x, waypoint.pose.pose.position.y] for waypoint in
+                                 msg.waypoints]
+            self.waypoint_tree = KDTree(self.waypoints_2d)
 
     def traffic_cb(self, msg):
         self.traffic_light_wp = msg.data
@@ -77,12 +84,8 @@ class WaypointUpdater(object):
         self.current_angular_z = velocity.twist.angular.z
 
     def publish_final_waypoints(self):
-        if self.current_pose is None:
-            return
+        self.next_wp = self.get_closest_waypoint_id(self.current_pose)
 
-        self.next_wp = self.find_next_wp(self.lane.waypoints, self.current_pose)
-
-        # Set default to maximum speed
         self.final_waypoints = []
         next_wp_id = self.next_wp
         for i in range(LOOKAHEAD_WPS):
@@ -179,32 +182,22 @@ class WaypointUpdater(object):
 
         return dist
 
-    @staticmethod
-    def find_next_wp(waypoints, pose):
-        min_dist = WaypointUpdater.distance_between(waypoints[0].pose.pose.position, pose.position)
-        closest_wp_id = 0
-        for i in range(1, len(waypoints)):
-            dist = WaypointUpdater.distance_between(waypoints[i].pose.pose.position, pose.position)
-            if dist < min_dist:
-                min_dist = dist
-                closest_wp_id = i
-        cur_x = pose.position.x
-        cur_y = pose.position.y
-        theta = math.atan2(cur_y, cur_x)
-        map_x = waypoints[closest_wp_id].pose.pose.position.x
-        map_y = waypoints[closest_wp_id].pose.pose.position.y
+    def get_closest_waypoint_id(self, pose):
+        x = pose.position.x
+        y = pose.position.y
+        closest_idx = self.waypoint_tree.query([x, y], 1)[1]
 
-        heading = math.atan2(map_y - cur_y, map_x - cur_x)
-        angle = math.fabs(theta - heading)
-        angle = min(2 * math.pi - angle, angle)
-        if angle > math.pi / 4:
-            next_wp_id = closest_wp_id + 1
-            if next_wp_id == len(waypoints):
-                next_wp_id = 0
-        else:
-            next_wp_id = closest_wp_id
+        closest_coord = self.waypoints_2d[closest_idx]
+        prev_coord = self.waypoints_2d[closest_idx - 1]
 
-        return next_wp_id
+        cl_vect = np.array(closest_coord)
+        prev_vect = np.array(prev_coord)
+        pos_vect = np.array([x, y])
+        val = np.dot(cl_vect - prev_vect, pos_vect - cl_vect)
+
+        if val > 0:
+            closest_idx = (closest_idx + 1) % len(self.waypoints_2d)
+        return closest_idx
 
 
 if __name__ == '__main__':
