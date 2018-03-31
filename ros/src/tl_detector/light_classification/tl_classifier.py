@@ -219,5 +219,5 @@ class TLClassifier(object):
                 (TrafficLight.GREEN, g_conf),
                 (TrafficLight.YELLOW, y_conf),
                 (TrafficLight.UNKNOWN, u_conf)]
-        sorted(conf, lambda x: x[1])
+        sorted(conf, key = lambda x: x[1])
         return conf[-1][0]
