@@ -4,15 +4,16 @@ import rospy
 import tensorflow as tf
 import numpy as np
 #from PIL import Image
-#import cv2
+import cv2
 
 FASTER_RCNN_GRAPH_FILE = 'light_classification/tld/frozen_inference_graph.pb'
 BOX_CONFIDENCE = 0.8
 RED_THRESHOLD = 150
 GREEN_THRESHOLD = 150
-CONF_TOP = 2.0
+CONF_TOP = 1.2
 CONF_BOT = 0.5
 TOP_5 = 5
+HISTOGRAM_WEIGHT = 2.0
 
 class TLClassifier(object):
     def __init__(self):
@@ -71,6 +72,9 @@ class TLClassifier(object):
             top_x = TOP_5
             # Filter boxes with a confidence score less than `confidence_cutoff`
             boxes, scores, classes = self.filter_boxes(top_x, boxes, scores, classes)
+            
+            #accumulate the scores according to the class
+            r_conf, g_conf, y_conf, u_conf = self.accumulate_conf(scores, classes)
 
             # The current box coordinates are normalized to a range between 0 and 1.
             # This converts the coordinates actual location on the image.
@@ -95,10 +99,15 @@ class TLClassifier(object):
                 #class_id = int(classes[i])
                 #tl_image = image.crop((int(left), int(bot), int(right), int(top)))
                 tl_image = image[int(bot):int(top), int(left):int(right)]
+                
+                # For debug
+                #self.draw_boxes(image, box_coords, classes)
+                #cv2.imwrite("./tl_{}.jpg".format(i), tl_image)
+                
                 im = np.array(tl_image)
                 total_vote += im.shape[0]*im.shape[1]
                 # Create the histogram for each RGB channel
-                rh, gh, bh = self.color_hist(im, nbins=32, bins_range=(0, 256))
+                bh, gh, rh = self.color_hist(im, nbins=32, bins_range=(0, 256))
                 if rh is not None:           
                     for i in range(len(rh[0])):
                         if rh[1][i] > RED_THRESHOLD:
@@ -110,34 +119,49 @@ class TLClassifier(object):
                             g_vote += gh[0][i]
 
             if TL_Detected:
+                # For debug
+                #cv2.imwrite("./result.jpg", image)
+                
                 r_confidence = r_vote/total_vote
                 g_confidence = g_vote/total_vote
+                #print("r_confidence={}".format(r_confidence))
+                #print("g_confidence={}".format(g_confidence))
                 if g_confidence > 0.0:
                     conf_ratio = r_confidence/g_confidence
                     if conf_ratio > CONF_TOP:
-                        return TrafficLight.RED
+                        #return TrafficLight.RED
+                        r_conf += HISTOGRAM_WEIGHT
+                        #print("hist judge is Red")
                     elif conf_ratio < CONF_BOT:
-                        return TrafficLight.GREEN
+                        #return TrafficLight.GREEN
+                        g_conf += HISTOGRAM_WEIGHT
+                        #print("hist judge is Green")
                     else:
-                        return TrafficLight.YELLOW
+                        #return TrafficLight.YELLOW
+                        y_conf += HISTOGRAM_WEIGHT
+                        #print("hist judge is Yellow")
                 else:
                     if r_confidence > 0.0:
-                        return TrafficLight.RED
+                        #return TrafficLight.RED
+                        r_conf += HISTOGRAM_WEIGHT
+                        #print("hist judge is Red")
                     else:
-                        rospy.loginfo('Check1...')
-                        return TrafficLight.UNKNOWN
+                        #return TrafficLight.UNKNOWN
+                        u_conf += HISTOGRAM_WEIGHT
+                        #print("hist judge is Unknown")
             else:
-                rospy.loginfo('Check2...')
-                return TrafficLight.UNKNOWN
+                #return TrafficLight.UNKNOWN
+                u_conf += HISTOGRAM_WEIGHT
             
-        return TrafficLight.UNKNOWN
+        #return TrafficLight.UNKNOWN
+        return self.sort_conf(r_conf, g_conf, y_conf, u_conf)
 
     def filter_boxes(self, top_x, boxes, scores, classes):
         """Return the top several scores boxes """
         idxs = []
         for i in range(top_x):
             #print("scores[{}] = {}, class = {}".format(i, scores[i], classes[i]))
-            rospy.loginfo("scores[{}] = {}, class = {}".format(i, scores[i], classes[i]))
+            #rospy.loginfo("scores[{}] = {}, class = {}".format(i, scores[i], classes[i]))
             idxs.append(i)
     
         filtered_boxes = boxes[idxs, ...]
@@ -187,3 +211,43 @@ class TLClassifier(object):
         ghist = np.histogram(img[:,:,1], nbins, bins_range)
         bhist = np.histogram(img[:,:,2], nbins, bins_range)
         return rhist, ghist, bhist
+    
+    @staticmethod
+    def accumulate_conf(scores, classes):
+        r_conf = 0
+        g_conf = 0
+        y_conf = 0
+        u_conf = 0
+        for i in range(len(classes)):
+            if classes[i] == 1:
+                g_conf += scores[i]
+            elif classes[i] == 2:
+                r_conf += scores[i]
+            elif classes[i] == 7:
+                y_conf += scores[i]
+            else:
+                u_conf += scores[i]
+        return r_conf, g_conf, y_conf, u_conf
+    
+    @staticmethod
+    def sort_conf(r_conf, g_conf, y_conf, u_conf):
+        conf = [(TrafficLight.RED, r_conf),
+                (TrafficLight.GREEN, g_conf),
+                (TrafficLight.YELLOW, y_conf),
+                (TrafficLight.UNKNOWN, u_conf)]
+
+        conf = sorted(conf, key = lambda x: x[1])
+        #for i in range(len(conf)):
+        #    print("{} is {}".format(conf[i][0], conf[i][1]))
+        return conf[-1][0]
+    
+    def draw_boxes(self, image, boxes, classes, thickness=4):
+        """Draw bounding boxes on the image"""
+        #draw = ImageDraw.Draw(image)
+        for i in range(len(boxes)):
+            bot, left, top, right = boxes[i, ...]
+            #class_id = int(classes[i])
+            #color = COLOR_LIST[class_id]
+            #draw.line([(left, top), (left, bot), (right, bot), (right, top), (left, top)], width=thickness, fill=color)
+            cv2.rectangle(image, (left, top), (right, bot), (0, 255, 0), 3)
+
