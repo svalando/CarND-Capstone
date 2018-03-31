@@ -43,7 +43,11 @@ if FLAGS.dir_images is not '':
     right_count = 0
     wrong_count = 0
     total_test = 0
+    tag_map = {"Red": 0,
+               "Yellow": 1,
+               "Green": 2}
     for pic_file in glob.glob(path + '/*.jpg'):
+        print("==================")
         image = cv2.imread(pic_file)
         total_test += 1
         light_classifier = TLClassifier()
@@ -54,7 +58,10 @@ if FLAGS.dir_images is not '':
         root = tree.getroot()
         first_member = root.findall('object')[0]
         tag = first_member[0].text
-        tag_map = -1
+        print("state is {}".format(state))
+        print("tag is {}".format(tag))
+        mapped_state = tag_map[tag]
+        """
         if tag is "Red":
             tag_map = 0
         elif tag is "Yellow":
@@ -63,11 +70,15 @@ if FLAGS.dir_images is not '':
             tag_map = 2
         else:
             tag_map = 4
-        
-        if state == tag_map:
+        """
+        print("mapped_state is {}".format(mapped_state))
+        if state == mapped_state:
             right_count += 1
         else:
             wrong_count += 1
+            
+        print("right count is {}".format(right_count))
+        print("wrong count is {}".format(wrong_count))
     print("right count is {}".format(right_count))
     print("wrong count is {}".format(wrong_count))
     print("total count is {}".format(total_test))

@@ -10,7 +10,7 @@ FASTER_RCNN_GRAPH_FILE = 'light_classification/tld/frozen_inference_graph.pb'
 BOX_CONFIDENCE = 0.8
 RED_THRESHOLD = 150
 GREEN_THRESHOLD = 150
-CONF_TOP = 2.0
+CONF_TOP = 1.2
 CONF_BOT = 0.5
 TOP_5 = 5
 
@@ -100,8 +100,8 @@ class TLClassifier(object):
                 tl_image = image[int(bot):int(top), int(left):int(right)]
                 
                 # For debug
-                self.draw_boxes(image, box_coords, classes)
-                cv2.imwrite("./tl_{}.jpg".format(i), tl_image)
+                #self.draw_boxes(image, box_coords, classes)
+                #cv2.imwrite("./tl_{}.jpg".format(i), tl_image)
                 
                 im = np.array(tl_image)
                 total_vote += im.shape[0]*im.shape[1]
@@ -119,28 +119,35 @@ class TLClassifier(object):
 
             if TL_Detected:
                 # For debug
-                cv2.imwrite("./result.jpg", image)
+                #cv2.imwrite("./result.jpg", image)
                 
                 r_confidence = r_vote/total_vote
                 g_confidence = g_vote/total_vote
+                print("r_confidence={}".format(r_confidence))
+                print("g_confidence={}".format(g_confidence))
                 if g_confidence > 0.0:
                     conf_ratio = r_confidence/g_confidence
                     if conf_ratio > CONF_TOP:
                         #return TrafficLight.RED
                         r_conf += 1
+                        print("hist judge is Red")
                     elif conf_ratio < CONF_BOT:
                         #return TrafficLight.GREEN
                         g_conf += 1
+                        print("hist judge is Green")
                     else:
                         #return TrafficLight.YELLOW
                         y_conf += 1
+                        print("hist judge is Yellow")
                 else:
                     if r_confidence > 0.0:
                         #return TrafficLight.RED
                         r_conf += 1
+                        print("hist judge is Red")
                     else:
                         #return TrafficLight.UNKNOWN
                         u_conf += 1
+                        print("hist judge is Unknown")
             else:
                 #return TrafficLight.UNKNOWN
                 u_conf += 1
@@ -152,7 +159,7 @@ class TLClassifier(object):
         """Return the top several scores boxes """
         idxs = []
         for i in range(top_x):
-            #print("scores[{}] = {}, class = {}".format(i, scores[i], classes[i]))
+            print("scores[{}] = {}, class = {}".format(i, scores[i], classes[i]))
             rospy.loginfo("scores[{}] = {}, class = {}".format(i, scores[i], classes[i]))
             idxs.append(i)
     
