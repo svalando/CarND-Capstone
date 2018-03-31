@@ -13,6 +13,7 @@ GREEN_THRESHOLD = 150
 CONF_TOP = 1.2
 CONF_BOT = 0.5
 TOP_5 = 5
+HISTOGRAM_WEIGHT = 2.0
 
 class TLClassifier(object):
     def __init__(self):
@@ -129,28 +130,28 @@ class TLClassifier(object):
                     conf_ratio = r_confidence/g_confidence
                     if conf_ratio > CONF_TOP:
                         #return TrafficLight.RED
-                        r_conf += 1
+                        r_conf += HISTOGRAM_WEIGHT
                         print("hist judge is Red")
                     elif conf_ratio < CONF_BOT:
                         #return TrafficLight.GREEN
-                        g_conf += 1
+                        g_conf += HISTOGRAM_WEIGHT
                         print("hist judge is Green")
                     else:
                         #return TrafficLight.YELLOW
-                        y_conf += 1
+                        y_conf += HISTOGRAM_WEIGHT
                         print("hist judge is Yellow")
                 else:
                     if r_confidence > 0.0:
                         #return TrafficLight.RED
-                        r_conf += 1
+                        r_conf += HISTOGRAM_WEIGHT
                         print("hist judge is Red")
                     else:
                         #return TrafficLight.UNKNOWN
-                        u_conf += 1
+                        u_conf += HISTOGRAM_WEIGHT
                         print("hist judge is Unknown")
             else:
                 #return TrafficLight.UNKNOWN
-                u_conf += 1
+                u_conf += HISTOGRAM_WEIGHT
             
         #return TrafficLight.UNKNOWN
         return self.sort_conf(r_conf, g_conf, y_conf, u_conf)
