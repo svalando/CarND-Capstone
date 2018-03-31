@@ -124,31 +124,31 @@ class TLClassifier(object):
                 
                 r_confidence = r_vote/total_vote
                 g_confidence = g_vote/total_vote
-                print("r_confidence={}".format(r_confidence))
-                print("g_confidence={}".format(g_confidence))
+                #print("r_confidence={}".format(r_confidence))
+                #print("g_confidence={}".format(g_confidence))
                 if g_confidence > 0.0:
                     conf_ratio = r_confidence/g_confidence
                     if conf_ratio > CONF_TOP:
                         #return TrafficLight.RED
                         r_conf += HISTOGRAM_WEIGHT
-                        print("hist judge is Red")
+                        #print("hist judge is Red")
                     elif conf_ratio < CONF_BOT:
                         #return TrafficLight.GREEN
                         g_conf += HISTOGRAM_WEIGHT
-                        print("hist judge is Green")
+                        #print("hist judge is Green")
                     else:
                         #return TrafficLight.YELLOW
                         y_conf += HISTOGRAM_WEIGHT
-                        print("hist judge is Yellow")
+                        #print("hist judge is Yellow")
                 else:
                     if r_confidence > 0.0:
                         #return TrafficLight.RED
                         r_conf += HISTOGRAM_WEIGHT
-                        print("hist judge is Red")
+                        #print("hist judge is Red")
                     else:
                         #return TrafficLight.UNKNOWN
                         u_conf += HISTOGRAM_WEIGHT
-                        print("hist judge is Unknown")
+                        #print("hist judge is Unknown")
             else:
                 #return TrafficLight.UNKNOWN
                 u_conf += HISTOGRAM_WEIGHT
@@ -160,8 +160,8 @@ class TLClassifier(object):
         """Return the top several scores boxes """
         idxs = []
         for i in range(top_x):
-            print("scores[{}] = {}, class = {}".format(i, scores[i], classes[i]))
-            rospy.loginfo("scores[{}] = {}, class = {}".format(i, scores[i], classes[i]))
+            #print("scores[{}] = {}, class = {}".format(i, scores[i], classes[i]))
+            #rospy.loginfo("scores[{}] = {}, class = {}".format(i, scores[i], classes[i]))
             idxs.append(i)
     
         filtered_boxes = boxes[idxs, ...]
@@ -237,8 +237,8 @@ class TLClassifier(object):
                 (TrafficLight.UNKNOWN, u_conf)]
 
         conf = sorted(conf, key = lambda x: x[1])
-        for i in range(len(conf)):
-            print("{} is {}".format(conf[i][0], conf[i][1]))
+        #for i in range(len(conf)):
+        #    print("{} is {}".format(conf[i][0], conf[i][1]))
         return conf[-1][0]
     
     def draw_boxes(self, image, boxes, classes, thickness=4):
