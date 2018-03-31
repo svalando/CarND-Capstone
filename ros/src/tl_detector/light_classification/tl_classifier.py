@@ -249,4 +249,4 @@ class TLClassifier(object):
             #color = COLOR_LIST[class_id]
             #draw.line([(left, top), (left, bot), (right, bot), (right, top), (left, top)], width=thickness, fill=color)
             cv2.rectangle(image, (left, top), (right, bot), (0, 255, 0), 3)
-        add_batch_test_classifier
+
