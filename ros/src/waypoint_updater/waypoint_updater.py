@@ -174,7 +174,7 @@ class WaypointUpdater(object):
 
         next_wp_id = wp1 + 1
         if next_wp_id == len(waypoints):
-                next_wp_id = 0
+            next_wp_id = 0
                 
         prev_wp_id = wp1
         for i in range(num_wp):
